@@ -10,6 +10,10 @@
     
     <div class="container" id="screen-waiting">
         <h1>Waiting for players...</h1>
+        <div id="time-config" class="hidden" style="margin-bottom: 20px;">
+            <label style="font-size: 20px; font-weight: bold;">Seconds per question:</label>
+            <input type="number" id="input-time" value="20" style="width: 100px; padding: 10px; margin-left: 10px; display: inline-block;">
+        </div>
         <button id="btn-start" class="btn-green hidden">Start Game</button>
         <div class="players-grid" id="players-list"></div>
     </div>
@@ -28,6 +32,10 @@
             <ol class="leaderboard-list" id="leaderboard-list"></ol>
         </div>
         <br>
+        <div style="margin-bottom: 20px;">
+            <label style="font-size: 20px; font-weight: bold;">Seconds for next question:</label>
+            <input type="number" id="input-next-time" value="20" style="width: 100px; padding: 10px; margin-left: 10px; display: inline-block;">
+        </div>
         <button id="btn-next" class="btn-blue">Next</button>
     </div>
 
@@ -63,11 +71,24 @@
             players.forEach(p => {
                 list.innerHTML += `<div class="player-chip">${p} <button onclick="kickPlayer('${p}')" style="background:#e21b3c; color:white; border:none; border-radius:50%; width:20px; height:20px; padding:0; cursor:pointer; margin-left:8px; font-weight:bold;">X</button></div>`;
             });
-            if (players.length > 0) document.getElementById('btn-start').classList.remove('hidden');
+            if (players.length > 0) {
+                document.getElementById('btn-start').classList.remove('hidden');
+                document.getElementById('time-config').classList.remove('hidden');
+            }
         });
 
-        document.getElementById('btn-start').onclick = () => { socket.emit('start_game', {pin: currentPin}); };
-        document.getElementById('btn-next').onclick = () => { socket.emit('next_question', {pin: currentPin}); };
+        document.getElementById('btn-start').onclick = () => { 
+            const timeLimit = parseInt(document.getElementById('input-time').value) || 20;
+            // Un pequeño toque: actualiza la casilla de la siguiente pantalla para que coincida con lo que elegiste ahora
+            document.getElementById('input-next-time').value = timeLimit;
+            socket.emit('start_game', {pin: currentPin, time_limit: timeLimit}); 
+        };
+        
+        document.getElementById('btn-next').onclick = () => { 
+            const nextTimeLimit = parseInt(document.getElementById('input-next-time').value) || 20;
+            socket.emit('next_question', {pin: currentPin, time_limit: nextTimeLimit}); 
+        };
+        
         document.getElementById('btn-skip').onclick = () => { endQuestion(); };
 
         socket.on('new_question', (data) => {
