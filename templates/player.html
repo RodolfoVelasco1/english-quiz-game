@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Play - English Quiz</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="top-bar hidden" id="player-top-bar">PIN: <span id="player-pin"></span></div>
+
+    <div class="container" id="screen-join">
+        <h1 style="color:#864cbf;">English Quiz</h1>
+        <input type="number" id="input-pin" placeholder="Game PIN" required>
+        <input type="text" id="input-name" placeholder="Your Nickname" required>
+        <button id="btn-join" class="btn-green" style="width: 100%;">Enter</button>
+        <p id="error-msg" style="color: red; margin-top: 10px;"></p>
+    </div>
+
+    <div class="container hidden" id="screen-waiting">
+        <h2>You're in!</h2>
+        <p>See your nickname on screen</p>
+        <p>Waiting for the teacher to start...</p>
+    </div>
+
+    <div class="container hidden" id="screen-question">
+        <div class="timer" id="player-timer-display" style="width: 50px; height: 50px; font-size: 24px; margin-bottom: 10px;"></div> 
+        <div class="question-text" id="player-question" style="font-size: 20px; padding: 15px;"></div>
+        <div class="options-grid" id="player-options"></div>
+    </div>
+
+    <div class="container hidden" id="screen-result">
+        <h1 id="result-title">Result</h1>
+        <h2 id="result-points"></h2>
+        <h2 id="result-total"></h2>
+        <p>Look at the TV for the Leaderboard!</p>
+    </div>
+
+    <script>
+        const socket = io();
+        let myPin = '';
+        let playerTimerInterval;
+        
+        const sj = document.getElementById('screen-join');
+        const sw = document.getElementById('screen-waiting');
+        const sq = document.getElementById('screen-question');
+        const sr = document.getElementById('screen-result');
+        const topBar = document.getElementById('player-top-bar');
+
+        function hideAll() { sj.classList.add('hidden'); sw.classList.add('hidden'); sq.classList.add('hidden'); sr.classList.add('hidden'); }
+
+        document.getElementById('btn-join').onclick = () => {
+            const pin = document.getElementById('input-pin').value;
+            const name = document.getElementById('input-name').value;
+            if(pin && name) {
+                myPin = pin;
+                socket.emit('join_game', {pin: pin, name: name});
+            }
+        };
+
+        socket.on('join_success', () => {
+            hideAll(); sw.classList.remove('hidden');
+            topBar.classList.remove('hidden');
+            document.getElementById('player-pin').innerText = myPin;
+        });
+
+        socket.on('error', (data) => {
+            document.getElementById('error-msg').innerText = data.msg;
+        });
+
+        socket.on('new_question', (data) => {
+            hideAll(); sq.classList.remove('hidden');
+            document.getElementById('player-question').innerText = data.question;
+            const opts = document.getElementById('player-options');
+            opts.innerHTML = '';
+            const colors = ['btn-red', 'btn-blue', 'btn-yellow'];
+            data.options.forEach((opt, idx) => {
+                opts.innerHTML += `<button class="${colors[idx]}" onclick="sendAnswer(${idx})">${opt}</button>`;
+            });
+
+            let timeLeft = data.time_limit;
+            document.getElementById('player-timer-display').innerText = timeLeft;
+            clearInterval(playerTimerInterval);
+            playerTimerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('player-timer-display').innerText = timeLeft;
+                if (timeLeft <= 0) clearInterval(playerTimerInterval);
+            }, 1000);
+        });
+
+        function sendAnswer(idx) {
+            clearInterval(playerTimerInterval);
+            hideAll(); sw.classList.remove('hidden');
+            sw.innerHTML = "<h2>Waiting for others...</h2>";
+            socket.emit('submit_answer', {pin: myPin, answer: idx});
+        }
+
+        socket.on('player_result', (data) => {
+            clearInterval(playerTimerInterval); 
+            hideAll(); sr.classList.remove('hidden');
+            document.getElementById('result-title').innerText = data.earned > 0 ? "Correct! 👏" : "Incorrect ❌";
+            document.getElementById('result-title').style.color = data.earned > 0 ? "#26890c" : "#e21b3c";
+            document.getElementById('result-points').innerText = `You win ${data.earned} points.`;
+            document.getElementById('result-total').innerText = `Your Score: ${data.total}`;
+        });
+
+        socket.on('kicked', () => {
+            alert("You have been removed from the game by the teacher.");
+            location.reload(); 
+        });
+
+        socket.on('game_over', () => {
+            hideAll(); sr.classList.remove('hidden');
+            document.getElementById('result-title').innerText = "Game Over!";
+            document.getElementById('result-points').innerText = "Look at the big screen!";
+        });
+    </script>
+</body>
+</html>

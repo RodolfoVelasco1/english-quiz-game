@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Host - English Quiz</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="top-bar">PIN: <span id="pin-display">Loading...</span></div>
+    
+    <div class="container" id="screen-waiting">
+        <h1>Waiting for players...</h1>
+        <button id="btn-start" class="btn-green hidden">Start Game</button>
+        <div class="players-grid" id="players-list"></div>
+    </div>
+
+    <div class="container hidden" id="screen-question">
+        <div class="timer" id="timer-display"></div>
+        <div class="question-text" id="host-question"></div>
+        <div class="options-grid" id="host-options"></div>
+        <br><br>
+        <button id="btn-skip" class="btn-red">End Question Early</button>
+    </div>
+
+    <div class="container hidden" id="screen-leaderboard">
+        <h2>Leaderboard</h2>
+        <div class="leaderboard-container">
+            <ol class="leaderboard-list" id="leaderboard-list"></ol>
+        </div>
+        <br>
+        <button id="btn-next" class="btn-blue">Next</button>
+    </div>
+
+    <div class="container hidden" id="screen-winners">
+        <h1 style="color: #e21b3c; font-size: 4em;">WINNERS!</h1>
+        <div class="leaderboard-container">
+            <ol class="leaderboard-list winners-list" id="winners-list"></ol>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentPin = '';
+        let timerInterval;
+
+        const sw = document.getElementById('screen-waiting');
+        const sq = document.getElementById('screen-question');
+        const sl = document.getElementById('screen-leaderboard');
+        const sWin = document.getElementById('screen-winners');
+
+        function hideAll() { sw.classList.add('hidden'); sq.classList.add('hidden'); sl.classList.add('hidden'); sWin.classList.add('hidden'); }
+
+        socket.on('connect', () => { socket.emit('create_game'); });
+
+        socket.on('game_created', (data) => {
+            currentPin = data.pin;
+            document.getElementById('pin-display').innerText = currentPin;
+        });
+
+        socket.on('players_update', (players) => {
+            const list = document.getElementById('players-list');
+            list.innerHTML = '';
+            players.forEach(p => {
+                list.innerHTML += `<div class="player-chip">${p} <button onclick="kickPlayer('${p}')" style="background:#e21b3c; color:white; border:none; border-radius:50%; width:20px; height:20px; padding:0; cursor:pointer; margin-left:8px; font-weight:bold;">X</button></div>`;
+            });
+            if (players.length > 0) document.getElementById('btn-start').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-start').onclick = () => { socket.emit('start_game', {pin: currentPin}); };
+        document.getElementById('btn-next').onclick = () => { socket.emit('next_question', {pin: currentPin}); };
+        document.getElementById('btn-skip').onclick = () => { endQuestion(); };
+
+        socket.on('new_question', (data) => {
+            hideAll(); sq.classList.remove('hidden');
+            document.getElementById('host-question').innerText = `Q${data.q_num}/${data.total_q}: ${data.question}`;
+            const opts = document.getElementById('host-options');
+            opts.innerHTML = '';
+            const colors = ['btn-red', 'btn-blue', 'btn-yellow'];
+            data.options.forEach((opt, idx) => {
+                opts.innerHTML += `<button class="${colors[idx]}" disabled>${opt}</button>`;
+            });
+            startTimer(data.time_limit);
+        });
+
+        function startTimer(seconds) {
+            let timeLeft = seconds;
+            document.getElementById('timer-display').innerText = timeLeft;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timer-display').innerText = timeLeft;
+                if (timeLeft <= 0) endQuestion();
+            }, 1000);
+        }
+
+        function endQuestion() {
+            clearInterval(timerInterval);
+            socket.emit('end_question', {pin: currentPin});
+        }
+
+        socket.on('force_end_question', () => { endQuestion(); });
+
+        socket.on('show_leaderboard', (leaderboard) => {
+            hideAll(); sl.classList.remove('hidden');
+            const list = document.getElementById('leaderboard-list');
+            list.innerHTML = '';
+            leaderboard.forEach(p => {
+                list.innerHTML += `<li><span>${p.name} <button onclick="kickPlayer('${p.name}')" style="background:#e21b3c; color:white; border:none; border-radius:5px; padding:3px 8px; cursor:pointer; margin-left:10px; font-size:14px;">Kick</button></span> <span>${p.score}</span></li>`;
+            });
+        });
+
+        function kickPlayer(name) {
+            if(confirm(`Remove ${name} from the game?`)) {
+                socket.emit('kick_player', {pin: currentPin, name: name});
+            }
+        }
+
+        socket.on('game_over', (leaderboard) => {
+            hideAll(); sWin.classList.remove('hidden');
+            const list = document.getElementById('winners-list');
+            list.innerHTML = '';
+            leaderboard.forEach(p => {
+                list.innerHTML += `<li><span>${p.name}</span> <span>${p.score} pts</span></li>`;
+            });
+        });
+    </script>
+</body>
+</html>
