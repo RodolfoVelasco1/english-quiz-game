@@ -7,9 +7,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# --- CONFIGURACIÓN DEL JUEGO ---
-QUESTION_TIME = 25 # Cambia este número para darles más o menos segundos
-
 QUESTIONS = [
     {"q": "Imagine Dragons are very famous. _______ favorite music is rock.", "options": ["A) His", "B) Her", "C) Their"], "correct": 2},
     {"q": "Look at Nicki Nicole. _______ favorite color is black.", "options": ["A) Her", "B) His", "C) Their"], "correct": 0},
@@ -50,7 +47,8 @@ def on_create():
         'players': {},
         'current_q': 0,
         'state': 'waiting',
-        'start_time': 0
+        'start_time': 0,
+        'time_limit': 20 # Tiempo por defecto
     }
     join_room(pin)
     emit('game_created', {'pin': pin})
@@ -73,6 +71,7 @@ def on_start(data):
     pin = data['pin']
     if pin in games:
         games[pin]['current_q'] = 0
+        games[pin]['time_limit'] = data.get('time_limit', 20) 
         send_question(pin)
 
 @socketio.on('next_question')
@@ -80,6 +79,9 @@ def on_next(data):
     pin = data['pin']
     if pin in games:
         games[pin]['current_q'] += 1
+        if 'time_limit' in data:
+            games[pin]['time_limit'] = data['time_limit']
+            
         if games[pin]['current_q'] < len(QUESTIONS):
             send_question(pin)
         else:
@@ -98,7 +100,7 @@ def send_question(pin):
         'total_q': len(QUESTIONS),
         'question': q_data['q'],
         'options': q_data['options'],
-        'time_limit': QUESTION_TIME
+        'time_limit': games[pin]['time_limit']
     }, room=pin)
 
 @socketio.on('submit_answer')
@@ -114,7 +116,8 @@ def on_answer(data):
         q_data = QUESTIONS[games[pin]['current_q']]
         if ans_idx == q_data['correct']:
             time_taken = time.time() - games[pin]['start_time']
-            descuento_por_segundo = 500 / QUESTION_TIME 
+            question_time = games[pin]['time_limit']
+            descuento_por_segundo = 500 / question_time 
             points = max(500, int(1000 - (time_taken * descuento_por_segundo)))
             if points > 1000: points = 1000
             player['last_points'] = points
