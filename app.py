@@ -57,14 +57,45 @@ def on_create():
 def on_join(data):
     pin = data.get('pin')
     name = data.get('name')
-    if pin in games and games[pin]['state'] == 'waiting':
+    
+    if pin in games:
         join_room(pin)
-        games[pin]['players'][request.sid] = {'name': name, 'score': 0, 'last_points': 0, 'answered': False}
+        
+        # 1. Buscamos si el alumno ya estaba jugando y se le cortó el internet
+        existing_sid = None
+        for sid, p in list(games[pin]['players'].items()):
+            if p['name'] == name:
+                existing_sid = sid
+                break
+        
+        if existing_sid:
+            # Reconexión: mudamos sus puntos a su nueva conexión
+            games[pin]['players'][request.sid] = games[pin]['players'].pop(existing_sid)
+            # Si reconecta justo mientras todos están respondiendo, no lo dejamos votar doble
+            if games[pin]['state'] == 'playing':
+                games[pin]['players'][request.sid]['answered'] = True
+        else:
+            # 2. Es un jugador completamente nuevo
+            games[pin]['players'][request.sid] = {'name': name, 'score': 0, 'last_points': 0, 'answered': False}
+        
+        # 3. Actualizamos la pantalla del profe
         players_list = [p['name'] for p in games[pin]['players'].values()]
         emit('players_update', players_list, room=pin)
         emit('join_success', to=request.sid)
+        
+        # 4. LA MAGIA: Si la partida ya empezó, le enviamos la pregunta actual en la cara
+        if games[pin]['state'] == 'playing':
+            q_data = QUESTIONS[games[pin]['current_q']]
+            emit('new_question', {
+                'q_num': games[pin]['current_q'] + 1,
+                'total_q': len(QUESTIONS),
+                'question': q_data['q'],
+                'options': q_data['options'],
+                'time_limit': games[pin]['time_limit']
+            }, to=request.sid)
     else:
-        emit('error', {'msg': 'Invalid PIN or game already started'}, to=request.sid)
+        # Solo da error si el PIN escrito no existe
+        emit('error', {'msg': 'Invalid PIN. Please check the TV!'}, to=request.sid)
 
 @socketio.on('start_game')
 def on_start(data):
