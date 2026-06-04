@@ -7,7 +7,10 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
-    <div class="top-bar hidden" id="player-top-bar">PIN: <span id="player-pin"></span></div>
+    <div class="top-bar hidden" id="player-top-bar" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>PIN: <span id="player-pin"></span></span>
+        <button onclick="location.reload()" style="background: #e21b3c; padding: 5px 10px; font-size: 16px; margin: 0; width: auto; border-radius: 5px;">↻ Play</button>
+    </div>
 
     <div class="container" id="screen-join">
         <h1 style="color:#864cbf;">English Quiz</h1>
